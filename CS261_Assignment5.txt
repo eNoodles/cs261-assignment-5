@@ -2,17 +2,43 @@
 Include the code changes you used to get the measurement with your submission, and explain your methodology (along with the number) here:  (5 points)
 
 <ANSWER_1>
+code changes to measure move records used:
+
+int move_records_used = 0;
+auto move_iter = last_confirmed_move_iter;
+++move_iter;
+while (move_iter != move_history_.end())
+{
+  non_host_x += move_iter->delta_x;
+  non_host_y += move_iter->delta_y;
+  ++move_iter;
+  ++move_records_used;
+}
+
+if (move_records_used > max_move_records_used_)
+{
+  max_move_records_used_ = move_records_used;
+  std::cout << "New max move records used: " 
+    << max_move_records_used_
+    << " at local frame " << local_frame_
+    << " (confirmed frame " << last_received_local_frame << ")"
+    << std::endl;
+}
+
+Running with the default settings (send target: 0ms) and moving around, the maximum number of move records used was 1. This is because the host sends updates continuously, so there is typically only one unconfirmed local move to replay.
 
 
 2) Change the host's send interval to 500 ms, and measure the the max movement history records used again. Did you use the same measuring technique? Explain the meaning of the answer -- why it is different or the same, and why.
 Enter the number and the explanation . (5 points)
 
 <ANSWER 2>
+Using the same measurement technique, I set the host send target to 500ms. The maximum number of move records used was 2. This is higher because the host sends updates less frequently, so more local inputs accumulate before being confirmed, but the increase is still small since 500ms does not introduce a large enough delay for many inputs to build up. I also observed that if I drag the server window around and stall it, the number of records used can spike significantly, since confirmations are delayed and many inputs accumulate before reconciliation.
 
 
 3) Introduce 500ms of latency via Clumsy, using the "udp.DstPort == 4200" (additional) filter, per the lab and assignment doc. Keep the send interval at 500ms as well.  Measure the the max movement history records used again, and enter the number here and explain why the value is different or the same. (5 points)
 
 <ANSWER 3>
+Using the same measurement technique, I added 500ms of latency via Clumsy while keeping the host send target at 500ms. The maximum number of move records used was 18. This increase is much larger than in Q2 because latency delays communication in both directions, increasing the round trip time and allowing more unconfirmed inputs to accumulate before reconciliation. As a result, the client must replay a larger number of movement records when applying the authoritative update.
 
 
 4) **IF** you implemented the Option-A remote-player-snapshot fix, briefly describe your implementation below. Otherwise, leave it as N/A.

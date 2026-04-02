@@ -37,6 +37,9 @@ public:
 	
 private:
 	State latest_state_, previous_state_;
+	std::deque<State> snapshots_;
+	float interpolation_timer_ = 0.0f;
+
 	SyncRatio sync_ratio_;
 	bool is_initialized_ = false;
 };

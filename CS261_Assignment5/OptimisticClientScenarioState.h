@@ -55,11 +55,20 @@ private:
     float send_timer_secs_;
     float time_since_last_recv_;
 
-    //TODO: define local movement record, containing:
+    //TODO DONE: define local movement record, containing:
     // 1) the local frame 
     // 2) the delta between the last frame's position and this frame's position, as x and y components
+    struct MoveRecord
+    {
+      u_long frame;
+      float delta_x;
+      float delta_y;
+    };
 
-    //TODO: define a history of local movement records, as a deque of the local movement records
+    //TODO DONE: define a history of local movement records, as a deque of the local movement records
+    std::deque<MoveRecord> move_history_;
+
+    int max_move_records_used_ = 0;
 
     Packet packet_;
 };

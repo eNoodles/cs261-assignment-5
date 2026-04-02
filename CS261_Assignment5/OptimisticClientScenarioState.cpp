@@ -55,12 +55,29 @@ void OptimisticClientScenarioState::Update()
 	auto control_right= CP_Input_KeyDown(CP_KEY::KEY_D) == TRUE;
 	direct_local_control_.SetControls(control_up, control_down, control_left, control_right);
 
-	// TODO: We want to get the last frame's control values (x and y) -- i.e. *before* updating,
+	// TODO DONE: We want to get the last frame's control values (x and y) -- i.e. *before* updating,
 	// then after updating, calculate the delta between the two frames.
 	// Push that new movement record to the back of the history deque.
 	// If we have more history than kMaxMoveHistorySize, pop entries off the
 	// front of the queue.
+	const auto previous_direct_local_x = direct_local_control_.GetCurrentX();
+	const auto previous_direct_local_y = direct_local_control_.GetCurrentY();
+
 	direct_local_control_.Update(dt);
+
+	const auto current_direct_local_x = direct_local_control_.GetCurrentX();
+	const auto current_direct_local_y = direct_local_control_.GetCurrentY();
+
+	move_history_.push_back({
+		local_frame_,
+		current_direct_local_x - previous_direct_local_x,
+		current_direct_local_y - previous_direct_local_y
+	});
+
+	while (move_history_.size() > kMaxMoveHistorySize)
+	{
+		move_history_.pop_front();
+	}
 	// retrieve this frame's control values (x and y), i.e. *after* updating
 	auto direct_local_x = direct_local_control_.GetCurrentX();
 	auto direct_local_y = direct_local_control_.GetCurrentY();
@@ -99,7 +116,8 @@ void OptimisticClientScenarioState::Update()
 			float host_x, host_y;
 			float non_host_x, non_host_y;
 			// CONVENTION: host writes its own values first
-			//TODO: read a u_long from the host's packet, into "last_received_local_frame"
+			//TODO DONE: read a u_long from the host's packet, into "last_received_local_frame"
+			PacketSerializer::ReadValue<u_long>(packet_, last_received_local_frame);
 			PacketSerializer::ReadValue<float>(packet_, host_time_between_updates);
 			PacketSerializer::ReadValue<float>(packet_, host_x);
 			PacketSerializer::ReadValue<float>(packet_, host_y);
@@ -110,14 +128,44 @@ void OptimisticClientScenarioState::Update()
 			PacketSerializer::ReadValue<float>(packet_, non_host_x);
 			PacketSerializer::ReadValue<float>(packet_, non_host_y);
 			direct_local_control_.SetLastRemotePosition(non_host_x, non_host_y); // for debug rendering
-			//TODO: find the record with the same frame as last_received_local_frame
+			//TODO DONE: find the record with the same frame as last_received_local_frame
 			// -- you likely should use std::find_if... see the implementation for server-rewind in OptimisticHostScenarioState.cpp for a hint on syntax!
-			// -- if the record isn't found, you should describe the problem in cerr... but this is very unlikely 
-			//TODO: advance the iterator one - we want the *next* delta
-			//TODO: while (iterator != deque.end()), accumulate the subsequent movement deltas:
+			// -- if the record isn't found, you should describe the problem in cerr... but this is very unlikely
+			const auto last_confirmed_move_iter = std::find_if(move_history_.begin(), move_history_.end(), [=](const MoveRecord& record) { 
+				return record.frame == last_received_local_frame; 
+			});
+			//TODO DONE: advance the iterator one - we want the *next* delta
+			//TODO DONE: while (iterator != deque.end()), accumulate the subsequent movement deltas:
 			// 1) add the record's delta (x and y) to the non_host_x and non_host_y
 			// 2) advance the iterator
 			// REMEMBER: ++ will advance iterators, you can get values from the iter using -> (i.e. iter->delta_x)
+			if (last_confirmed_move_iter == move_history_.end())
+			{
+				std::cerr << "Confirmed local frame " << last_received_local_frame << " was not found in move history" << std::endl;
+			}
+			else
+			{
+				int move_records_used = 0;
+				auto move_iter = last_confirmed_move_iter;
+				++move_iter;
+				while (move_iter != move_history_.end())
+				{
+					non_host_x += move_iter->delta_x;
+					non_host_y += move_iter->delta_y;
+					++move_iter;
+					++move_records_used;
+				}
+
+				if (move_records_used > max_move_records_used_)
+				{
+					max_move_records_used_ = move_records_used;
+					std::cout << "New max move records used: " 
+						<< max_move_records_used_
+						<< " at local frame " << local_frame_
+						<< " (confirmed frame " << last_received_local_frame << ")"
+						<< std::endl;
+				}
+			}
 			direct_local_control_.SetPosition(non_host_x, non_host_y);
 
 			// if there is a confirmed client attack, then process it
